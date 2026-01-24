@@ -1,0 +1,508 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Kassa</title>
+  <style>
+    body { font-family: system-ui, Arial; margin:0; background:#0b1220; color:#fff; }
+    .wrap { max-width: 760px; margin: 0 auto; padding: 18px; }
+    .top { display:flex; justify-content:space-between; align-items:center; gap:10px; }
+    .pill { background:#1f2a44; padding:6px 10px; border-radius:999px; font-size:12px; opacity:.9; color:#fff; text-decoration:none; }
+    .card { background:#121a2b; border-radius:16px; padding:18px; box-shadow:0 10px 40px rgba(0,0,0,.35); margin-top:14px; }
+    label { display:block; font-size:12px; opacity:.85; margin: 10px 0 6px; }
+    input, select { width:100%; padding:10px; border-radius:10px; border:1px solid #2b3a5c; background:#0e1627; color:#fff; }
+    .row { display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+    .btn { width:100%; border:0; border-radius:12px; padding:12px; background:#2a3bff; color:#fff; font-weight:700; cursor:pointer; }
+    .btn.secondary { background:#1f2a44; }
+    .btn:disabled { opacity:.5; cursor:not-allowed; }
+    .muted { opacity:.8; font-size:12px; }
+    .ok { color:#8cffb0; }
+    .bad { color:#ff9a9a; }
+    #reader { width:100%; border-radius: 14px; overflow:hidden; border:1px solid #2b3a5c; }
+    .split { display:grid; grid-template-columns: 1fr; gap:12px; }
+    @media (min-width: 860px) { .split { grid-template-columns: 1.1fr 0.9fr; } }
+    .small { font-size: 12px; opacity:.8; }
+    .queue { background:#0e1627; border:1px solid #2b3a5c; border-radius:12px; padding:10px; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div>
+        <h2 style="margin:0 0 6px;">Kassa (web)</h2>
+        <div class="muted">Shop → login → scan → verstuur</div>
+      </div>
+      <a class="pill" href="/">↩ keuze</a>
+    </div>
+
+    <div class="card" id="stepStore">
+      <h3 style="margin:0 0 10px;">1) Kies shop</h3>
+      <label>Shop</label>
+      <select id="store"></select>
+      <button class="btn" id="storeNext" style="margin-top:12px;">Volgende</button>
+      <div class="muted" id="storeStatus" style="margin-top:10px;"></div>
+    </div>
+
+    <div class="card" id="stepLogin" style="display:none;">
+      <h3 style="margin:0 0 10px;">2) Inloggen</h3>
+      <div class="muted" id="chosenShop"></div>
+
+      <label>Gebruikersnaam</label>
+      <input id="username" autocomplete="username" value="staff1" />
+
+      <label>Wachtwoord</label>
+      <input id="password" type="password" autocomplete="current-password" value="1234" />
+
+      <div class="row" style="margin-top:12px;">
+        <button class="btn secondary" id="backToStore">Terug</button>
+        <button class="btn" id="loginBtn">Inloggen</button>
+      </div>
+
+      <div class="muted" style="margin-top:10px;">
+        Demo per shop: <code>staff1/1234</code> of <code>manager1/1234</code>
+      </div>
+      <div class="muted" id="loginStatus" style="margin-top:10px;"></div>
+    </div>
+
+    <div class="card" id="stepCashier" style="display:none;">
+      <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">
+        <div>
+          <h3 style="margin:0 0 6px;">3) Kassa</h3>
+          <div class="muted" id="sessionInfo"></div>
+        </div>
+        <div style="display:grid; gap:10px; width: 160px;">
+          <button class="btn secondary" id="changeShop">Shop wisselen</button>
+          <button class="btn secondary" id="logoutBtn">Logout</button>
+        </div>
+      </div>
+
+      <div class="split" style="margin-top:14px;">
+        <div>
+          <label>Scan QR (camera)</label>
+          <div id="reader"></div>
+          <div class="small" style="margin-top:8px;">
+            Camera werkt op <b>HTTPS</b> (of localhost). Als dit niet werkt: gebruik <b>Plakken</b>.
+          </div>
+          <div class="row" style="margin-top:10px;">
+            <button class="btn secondary" id="startScan">Start scan</button>
+            <button class="btn secondary" id="stopScan">Stop scan</button>
+          </div>
+        </div>
+
+        <div>
+          <label>walletId</label>
+          <input id="walletId" placeholder="scan of plak walletId" />
+
+          <div class="row" style="margin-top:10px;">
+            <button class="btn secondary" id="pasteBtn">Plak</button>
+            <button class="btn secondary" id="clearBtn">Leeg</button>
+          </div>
+
+          <label style="margin-top:14px;">Bedrag (€)</label>
+          <input id="amount" value="25.00" />
+
+          <button class="btn" id="sendBtn" style="margin-top:12px;" disabled>Verstuur</button>
+
+          <div class="muted" id="sendStatus" style="margin-top:10px;"></div>
+
+          <div style="height:12px;"></div>
+          <div class="queue">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <div><b>Offline wachtrij</b> <span class="muted">(auto)</span></div>
+              <button class="btn secondary" id="flushBtn" style="width:auto; padding:8px 10px;">Nu versturen</button>
+            </div>
+            <div class="muted" id="queueStatus" style="margin-top:8px;"></div>
+          </div>
+
+          <div class="muted" style="margin-top:10px;">
+            API: <code id="apiLabel"></code>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- QR scanner lib -->
+  <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.10/minified/html5-qrcode.min.js"></script>
+
+  <script>
+    // ✅ Zet dit straks naar jouw echte backend URL (Cloud Run), bv:
+    // const API_BASE = "https://api.jouwdomein.nl";
+    const API_BASE = "http://localhost:3000";
+
+    const els = {
+      store: document.getElementById("store"),
+      storeNext: document.getElementById("storeNext"),
+      storeStatus: document.getElementById("storeStatus"),
+      stepStore: document.getElementById("stepStore"),
+
+      stepLogin: document.getElementById("stepLogin"),
+      chosenShop: document.getElementById("chosenShop"),
+      backToStore: document.getElementById("backToStore"),
+      loginBtn: document.getElementById("loginBtn"),
+      username: document.getElementById("username"),
+      password: document.getElementById("password"),
+      loginStatus: document.getElementById("loginStatus"),
+
+      stepCashier: document.getElementById("stepCashier"),
+      sessionInfo: document.getElementById("sessionInfo"),
+      changeShop: document.getElementById("changeShop"),
+      logoutBtn: document.getElementById("logoutBtn"),
+
+      walletId: document.getElementById("walletId"),
+      amount: document.getElementById("amount"),
+      sendBtn: document.getElementById("sendBtn"),
+      sendStatus: document.getElementById("sendStatus"),
+      pasteBtn: document.getElementById("pasteBtn"),
+      clearBtn: document.getElementById("clearBtn"),
+
+      startScan: document.getElementById("startScan"),
+      stopScan: document.getElementById("stopScan"),
+
+      apiLabel: document.getElementById("apiLabel"),
+
+      queueStatus: document.getElementById("queueStatus"),
+      flushBtn: document.getElementById("flushBtn"),
+    };
+
+    els.apiLabel.textContent = API_BASE;
+
+    // -------------------- STATE --------------------
+    let selectedStore = null; // {id,name}
+    let session = null;       // { token, store, user }
+    let scanner = null;
+
+    // Offline queue in localStorage
+    const QUEUE_KEY = "offlineQueue_v1";
+    function loadQueue() {
+      try { return JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]"); }
+      catch { return []; }
+    }
+    function saveQueue(items) {
+      localStorage.setItem(QUEUE_KEY, JSON.stringify(items));
+      renderQueue();
+    }
+    function enqueue(item) {
+      const q = loadQueue();
+      q.push(item);
+      saveQueue(q);
+    }
+    function renderQueue() {
+      const q = loadQueue();
+      els.queueStatus.textContent = q.length
+        ? `In wachtrij: ${q.length} transactie(s). Wordt automatisch verstuurd zodra internet terug is.`
+        : "Wachtrij leeg ✅";
+    }
+
+    // -------------------- HELPERS --------------------
+    function setStep(step) {
+      els.stepStore.style.display = step === "store" ? "" : "none";
+      els.stepLogin.style.display = step === "login" ? "" : "none";
+      els.stepCashier.style.display = step === "cashier" ? "" : "none";
+    }
+
+    function parseWalletIdFromQR(raw) {
+      const text = (raw || "").trim();
+      if (!text) return null;
+
+      // QR payload: {"walletId":"w_...","storeId":"s1","v":1}
+      try {
+        const j = JSON.parse(text);
+        if (j && typeof j.walletId === "string") return j.walletId;
+      } catch {}
+
+      // direct walletId
+      if (text.startsWith("w_")) return text;
+
+      return null;
+    }
+
+    function amountToCents(v) {
+      const cleaned = (v || "").replace(",", ".").trim();
+      const num = Number(cleaned);
+      if (!isFinite(num)) return 0;
+      return Math.round(num * 100);
+    }
+
+    function updateSendEnabled() {
+      const hasWallet = els.walletId.value.trim().length > 0;
+      els.sendBtn.disabled = !hasWallet || !session;
+    }
+
+    // -------------------- API --------------------
+    async function apiGet(path) {
+      const r = await fetch(API_BASE + path);
+      if (!r.ok) throw new Error(`HTTP ${r.status}: ${await r.text()}`);
+      return await r.json();
+    }
+
+    async function apiPost(path, body, withAuth = false) {
+      const headers = { "Content-Type": "application/json" };
+      if (withAuth && session?.token) headers["Authorization"] = "Bearer " + session.token;
+
+      const r = await fetch(API_BASE + path, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+      });
+
+      if (!r.ok) throw new Error(`HTTP ${r.status}: ${await r.text()}`);
+      return await r.json();
+    }
+
+    // -------------------- LOAD STORES --------------------
+    async function loadStores() {
+      els.storeStatus.textContent = "laden…";
+      try {
+        const data = await apiGet("/stores");
+        const stores = data.stores || [];
+        els.store.innerHTML = "";
+        for (const s of stores) {
+          const opt = document.createElement("option");
+          opt.value = s.id;
+          opt.textContent = s.name;
+          els.store.appendChild(opt);
+        }
+
+        // restore last selected
+        const saved = localStorage.getItem("selectedStoreId");
+        if (saved) els.store.value = saved;
+
+        els.storeStatus.textContent = "OK";
+      } catch (e) {
+        els.storeStatus.innerHTML = `<span class="bad">Fout:</span> ${e}`;
+      }
+    }
+
+    // -------------------- LOGIN FLOW --------------------
+    els.storeNext.onclick = () => {
+      const id = els.store.value;
+      const name = els.store.options[els.store.selectedIndex]?.textContent || id;
+      selectedStore = { id, name };
+      localStorage.setItem("selectedStoreId", id);
+      els.chosenShop.textContent = `Shop: ${name}`;
+      setStep("login");
+    };
+
+    els.backToStore.onclick = () => setStep("store");
+
+    els.loginBtn.onclick = async () => {
+      els.loginStatus.textContent = "inloggen…";
+      try {
+        const data = await apiPost("/auth/login", {
+          storeId: selectedStore.id,
+          username: els.username.value.trim(),
+          password: els.password.value.trim(),
+        });
+
+        session = {
+          token: data.token,
+          store: data.store,
+          user: data.user,
+        };
+        localStorage.setItem("session_v1", JSON.stringify(session));
+
+        els.sessionInfo.innerHTML = `Shop: <b>${session.store.name}</b> • User: <b>${session.user.username}</b> • Role: <b>${session.user.role}</b>`;
+        setStep("cashier");
+        updateSendEnabled();
+        renderQueue();
+
+        // auto flush queue elke 5 sec
+        startAutoFlush();
+
+        els.loginStatus.innerHTML = `<span class="ok">✅ ingelogd</span>`;
+      } catch (e) {
+        els.loginStatus.innerHTML = `<span class="bad">❌</span> ${e}`;
+      }
+    };
+
+    els.logoutBtn.onclick = async () => {
+      // local logout
+      session = null;
+      localStorage.removeItem("session_v1");
+      await stopScanSafe();
+      setStep("login");
+      updateSendEnabled();
+      els.sendStatus.textContent = "";
+    };
+
+    els.changeShop.onclick = async () => {
+      session = null;
+      localStorage.removeItem("session_v1");
+      await stopScanSafe();
+      setStep("store");
+    };
+
+    // restore session
+    function restoreSession() {
+      try {
+        const raw = localStorage.getItem("session_v1");
+        if (!raw) return;
+        session = JSON.parse(raw);
+        if (!session?.token) session = null;
+      } catch { session = null; }
+    }
+
+    // -------------------- SEND EARN --------------------
+    async function sendEarn(walletId, cents) {
+      return await apiPost("/earn", { walletId, amountCents: cents }, true);
+    }
+
+    els.sendBtn.onclick = async () => {
+      const walletId = els.walletId.value.trim();
+      const cents = amountToCents(els.amount.value);
+
+      if (!walletId) return;
+
+      els.sendStatus.textContent = "versturen…";
+      try {
+        const data = await sendEarn(walletId, cents);
+        els.sendStatus.innerHTML = `<span class="ok">✅</span> +${data.stampsAdded} → totaal ${data.stampsAfter}/10`;
+      } catch (e) {
+        // offline? stop in queue
+        els.sendStatus.innerHTML = `<span class="bad">Offline/fout</span> → opgeslagen in wachtrij`;
+        enqueue({
+          ts: new Date().toISOString(),
+          walletId,
+          amountCents: cents,
+          storeId: session?.store?.id,
+        });
+      }
+    };
+
+    // enable button when typing
+    els.walletId.addEventListener("input", updateSendEnabled);
+
+    els.pasteBtn.onclick = async () => {
+      try {
+        const text = await navigator.clipboard.readText();
+        const id = parseWalletIdFromQR(text) || text.trim();
+        if (id) els.walletId.value = id;
+        updateSendEnabled();
+      } catch {
+        els.sendStatus.textContent = "Plakken werkt niet (browser). Plak handmatig met Ctrl+V.";
+      }
+    };
+
+    els.clearBtn.onclick = () => {
+      els.walletId.value = "";
+      updateSendEnabled();
+    };
+
+    // -------------------- OFFLINE QUEUE FLUSH --------------------
+    let flushTimer = null;
+
+    async function flushQueueOnce() {
+      if (!session?.token) return;
+      const q = loadQueue();
+      if (!q.length) return;
+
+      // probeer oudste eerst
+      const first = q[0];
+      try {
+        await sendEarn(first.walletId, first.amountCents);
+        q.shift();
+        saveQueue(q);
+        els.sendStatus.innerHTML = `<span class="ok">✅</span> Wachtrij item verstuurd`;
+      } catch {
+        // nog steeds offline → stop
+      }
+    }
+
+    function startAutoFlush() {
+      if (flushTimer) return;
+      flushTimer = setInterval(flushQueueOnce, 5000);
+    }
+
+    els.flushBtn.onclick = flushQueueOnce;
+
+    // -------------------- CAMERA SCAN --------------------
+    async function startScan() {
+      if (!session) {
+        els.sendStatus.textContent = "Log eerst in.";
+        return;
+      }
+      if (scanner) return;
+
+      scanner = new Html5Qrcode("reader");
+      els.sendStatus.textContent = "Camera openen… (geef toestemming)";
+
+      const config = { fps: 10, qrbox: { width: 240, height: 240 } };
+
+      try {
+        const devices = await Html5Qrcode.getCameras();
+        if (!devices || !devices.length) throw new Error("Geen camera gevonden");
+
+        // probeer back camera als die er is
+        const back = devices.find(d => /back|rear|environment/i.test(d.label));
+        const cameraId = (back || devices[0]).id;
+
+        await scanner.start(
+          { deviceId: { exact: cameraId } },
+          config,
+          (decodedText) => {
+            const id = parseWalletIdFromQR(decodedText);
+            if (id) {
+              els.walletId.value = id;
+              updateSendEnabled();
+              els.sendStatus.innerHTML = `<span class="ok">✅</span> walletId gevuld door scan`;
+              // stop scan na succes (minder gedoe)
+              stopScanSafe();
+            }
+          },
+          () => {}
+        );
+
+        els.sendStatus.innerHTML = `<span class="ok">✅</span> Scannen gestart`;
+      } catch (e) {
+        els.sendStatus.innerHTML = `<span class="bad">❌</span> Camera fout: ${e}<br><span class="muted">Tip: camera werkt alleen op HTTPS of localhost.</span>`;
+        await stopScanSafe();
+      }
+    }
+
+    async function stopScanSafe() {
+      try {
+        if (scanner) {
+          await scanner.stop();
+          await scanner.clear();
+        }
+      } catch {}
+      scanner = null;
+    }
+
+    els.startScan.onclick = startScan;
+    els.stopScan.onclick = stopScanSafe;
+
+    // -------------------- INIT --------------------
+    (async function init() {
+      setStep("store");
+      renderQueue();
+      await loadStores();
+
+      // restore selected store
+      const savedStoreId = localStorage.getItem("selectedStoreId");
+      if (savedStoreId) {
+        const opt = [...els.store.options].find(o => o.value === savedStoreId);
+        if (opt) {
+          selectedStore = { id: savedStoreId, name: opt.textContent };
+          els.chosenShop.textContent = `Shop: ${selectedStore.name}`;
+        }
+      }
+
+      restoreSession();
+      if (session?.token) {
+        // session restore → ga meteen naar cashier
+        els.sessionInfo.innerHTML = `Shop: <b>${session.store.name}</b> • User: <b>${session.user.username}</b> • Role: <b>${session.user.role}</b>`;
+        setStep("cashier");
+        updateSendEnabled();
+        renderQueue();
+        startAutoFlush();
+      } else if (selectedStore) {
+        setStep("login");
+      }
+    })();
+  </script>
+</body>
+</html>
