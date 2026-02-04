@@ -1,123 +1,45 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="nl">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Klant</title>
-  <style>
-    body { font-family: system-ui, Arial; margin: 0; background:#0b1220; color:#fff; }
-    .wrap { max-width: 720px; margin: 0 auto; padding: 18px; }
-    .card { background:#121a2b; border-radius:16px; padding:18px; box-shadow:0 10px 40px rgba(0,0,0,.35); }
-    .top { display:flex; justify-content:space-between; align-items:center; gap:10px; }
-    .pill { background:#1f2a44; padding:6px 10px; border-radius:999px; font-size:12px; opacity:.9; }
-    .grid { display:grid; grid-template-columns: repeat(5, 1fr); gap:10px; margin-top:14px;}
-    .stamp { height:46px; border:1px solid #2b3a5c; border-radius:12px; display:grid; place-items:center; }
-    .btn { margin-top:12px; width:100%; border:0; border-radius:12px; padding:12px; background:#2a3bff; color:#fff; font-weight:700; }
-    .muted { opacity:.8; font-size:12px; }
-    input { width: 100%; padding: 10px; border-radius: 10px; border:1px solid #2b3a5c; background:#0e1627; color:#fff; }
-  </style>
+  <meta charset="UTF-8" />
+  <title>Klant – Stempeler</title>
 </head>
 <body>
-  <div class="wrap">
-    <div class="top">
-      <div>
-        <h2 style="margin:0 0 6px;">Klant</h2>
-        <div class="muted">QR + stempels</div>
-      </div>
-      <a class="pill" href="/">↩ keuze</a>
-    </div>
+  <h1>Klant</h1>
 
-    <div class="card" style="margin-top:14px;">
-      <div class="muted">Shop</div>
-      <select id="store" style="margin-top:6px; width:100%; padding:10px; border-radius:10px; border:1px solid #2b3a5c; background:#0e1627; color:#fff;">
-        <option value="s1">Shop A</option>
-        <option value="s2">Shop B</option>
-      </select>
+  <label>Store ID</label><br />
+  <input id="storeId" value="store1" /><br /><br />
 
-      <div style="height:14px;"></div>
-      <div class="muted">WalletId</div>
-      <input id="walletId" readonly />
+  <label>Wallet ID</label><br />
+  <input id="walletId" /><br /><br />
 
-      <button class="btn" id="copyBtn">Kopieer walletId</button>
+  <button onclick="loadWallet()">Bekijk stempels</button>
 
-      <div style="height:14px;"></div>
-      <div class="muted">QR (laat scannen bij kassa)</div>
-      <canvas id="qr" style="margin-top:10px; background:#fff; border-radius:12px; padding:10px;"></canvas>
+  <h2>Saldo</h2>
+  <pre id="wallet"></pre>
 
-      <div style="height:14px;"></div>
-      <div id="stampsText" style="font-weight:700;">Stempels: 0 / 10</div>
-      <div class="grid" id="grid"></div>
+  <h2>Transacties</h2>
+  <pre id="ledger"></pre>
 
-      <button class="btn" id="refreshBtn" style="background:#1f2a44;">Refresh</button>
-      <div class="muted" id="status" style="margin-top:10px;"></div>
-    </div>
-  </div>
-
-  <!-- QR lib (klein, client-side) -->
-  <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
   <script>
-    // ✅ Zet hier straks je echte API base (Cloud Run URL)
-    const API_BASE = "http://localhost:3000";
+    const API_BASE = "https://api.stempeler.com";
+    // of tijdelijk Cloud Run URL
 
-    function getOrCreateWalletId() {
-      let id = localStorage.getItem("walletId");
-      if (!id) {
-        id = "w_" + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
-        localStorage.setItem("walletId", id);
-      }
-      return id;
+    async function loadWallet() {
+      const storeId = document.getElementById("storeId").value;
+      const walletId = document.getElementById("walletId").value;
+
+      const res = await fetch(
+        API_BASE + `/wallet?storeId=${storeId}&walletId=${walletId}`
+      );
+      const data = await res.json();
+
+      document.getElementById("wallet").textContent =
+        JSON.stringify(data.wallet, null, 2);
+
+      document.getElementById("ledger").textContent =
+        JSON.stringify(data.ledger, null, 2);
     }
-
-    const walletIdEl = document.getElementById("walletId");
-    const storeEl = document.getElementById("store");
-    const stampsText = document.getElementById("stampsText");
-    const grid = document.getElementById("grid");
-    const statusEl = document.getElementById("status");
-
-    const walletId = getOrCreateWalletId();
-    walletIdEl.value = walletId;
-
-    function drawGrid(stamps) {
-      grid.innerHTML = "";
-      for (let i = 0; i < 10; i++) {
-        const d = document.createElement("div");
-        d.className = "stamp";
-        d.textContent = i < stamps ? "✓" : "";
-        grid.appendChild(d);
-      }
-    }
-
-    function updateQR() {
-      const payload = JSON.stringify({ walletId, storeId: storeEl.value, v: 1 });
-      new QRious({ element: document.getElementById("qr"), value: payload, size: 220 });
-    }
-
-    async function refresh() {
-      try {
-        statusEl.textContent = "laden…";
-        const storeId = storeEl.value;
-        updateQR();
-        const r = await fetch(`${API_BASE}/ledger/${walletId}?storeId=${encodeURIComponent(storeId)}`);
-        const data = await r.json();
-        stampsText.textContent = `Stempels: ${data.stamps} / 10`;
-        drawGrid(data.stamps);
-        statusEl.textContent = `OK • ${new Date().toLocaleTimeString()}`;
-      } catch (e) {
-        statusEl.textContent = "Fout: " + e;
-      }
-    }
-
-    document.getElementById("copyBtn").onclick = async () => {
-      await navigator.clipboard.writeText(walletId);
-      statusEl.textContent = "walletId gekopieerd ✅";
-    };
-    document.getElementById("refreshBtn").onclick = refresh;
-    storeEl.onchange = refresh;
-
-    updateQR();
-    drawGrid(0);
-    refresh();
-    setInterval(refresh, 2000);
   </script>
 </body>
 </html>
